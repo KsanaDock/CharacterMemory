@@ -28,6 +28,10 @@ class MemoryManager:
             )
 
 
+
+    def save_profile(self):
+        self.json_store.save_profile(self.profile)
+
     def update_memory(self, id: str, content: str, type: str, importance: int):
         self.vector_store.update_memory(id, content, type, importance)
 
