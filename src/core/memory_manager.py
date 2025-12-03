@@ -239,3 +239,6 @@ Respond naturally based on your memory and current state."""
             
         except Exception as e:
             return f"Failed to process reflection: {str(e)}\nRaw Response: {response}"
+    
+    def save_profile(self):
+        self.json_store.save_profile(self.profile)
