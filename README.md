@@ -1,110 +1,109 @@
-# AI Character Memory System
+# AI 角色记忆系统
 
-A locally deployable AI character memory system that supports long-term memory, structured profile management, and agentic reflection.
+一个支持本地部署的 AI 角色记忆系统，具备长期记忆、结构化档案管理和智能反思功能。
 
-[English](README.md) | [中文](README_ZH.md)
+[English](README_EN.md) | [中文](README.md)
 
-## 📖 Introduction
+## 📖 项目简介
 
-This project is designed to serve as a memory system for AI characters in games. It specifically addresses the challenge of vectorizing memory data by avoiding the "slicing problem" (context fragmentation) while preserving the semantic understanding capabilities of vectorization.
+本项目旨在为游戏中的 AI 角色提供一套完整的记忆系统服务。它特别解决了记忆数据向量化时的切片问题，避免了上下文碎片化，同时完整保留了向量化的语义理解能力。
 
-## 📂 Project Structure
+## 📂 项目结构
 
 ```
 d:\MyProj\character-memory\
-├── data/                  # 💾 Runtime Data Storage
-│   ├── profile.json       # Character profile (Name, Personality, Daily Log, etc.)
-│   └── chroma_db/         # Vector Database (ChromaDB) for semantic memory retrieval
-├── src/                   # 🧠 Source Code
-│   ├── app.py             # Main Streamlit Application (Frontend & Entry Point)
-│   ├── core/              # Core Logic
-│   │   └── memory_manager.py # Manages profile, retrieval, and reflection logic
-│   ├── models/            # Data Schemas
-│   │   └── schema.py      # Pydantic models (CharacterProfile, MemoryItem, DailyLogEntry)
-│   ├── services/          # External Services
-│   │   └── llm_service.py # LLM Integration (OpenRouter/OpenAI)
-│   └── storage/           # Data Access Layer
-│       ├── json_store.py  # Handles profile.json operations
-│       └── vector_store.py# Handles ChromaDB operations
-├── docs/                  # Documentation
-└── requirements.txt       # Python Dependencies
+├── data/                  # 💾 运行时数据存储
+│   ├── profile.json       # 角色档案 (姓名, 性格, 日志等)
+│   └── chroma_db/         # 向量数据库 (ChromaDB) 用于语义记忆检索
+├── src/                   # 🧠 源代码
+│   ├── app.py             # Streamlit 主程序 (前端入口)
+│   ├── core/              # 核心逻辑
+│   │   └── memory_manager.py # 管理档案、检索和反思逻辑
+│   ├── models/            # 数据模型
+│   │   └── schema.py      # Pydantic 模型 (CharacterProfile, MemoryItem, DailyLogEntry)
+│   ├── services/          # 外部服务
+│   │   └── llm_service.py # LLM 集成 (OpenRouter/OpenAI)
+│   └── storage/           # 数据访问层
+│       ├── json_store.py  # 处理 profile.json 操作
+│       └── vector_store.py# 处理 ChromaDB 操作
+├── docs/                  # 文档
+└── requirements.txt       # Python 依赖
 ```
 
-## 💾 Data Storage
+## 💾 数据存储
 
--   **Profile Data**: Stored in `data/profile.json`. This file contains the character's structured state, including:
-    -   Basic Info (Name, Occupation)
-    -   Personality & Values
-    -   Relationships
-    -   **Daily Log** (Record of activities and interactions)
-    -   Status (Health, Wealth)
+-   **档案数据 (Profile Data)**: 存储在 `data/profile.json`。包含角色的结构化状态：
+    -   基本信息 (姓名, 职业)
+    -   性格与价值观
+    -   人际关系
+    -   **每日日志 (Daily Log)** (活动和互动的记录)
+    -   状态 (健康, 财富)
 
--   **Memory Data**: Stored in `data/chroma_db`. This is a local vector database that stores:
-    -   Conversation history (User inputs & AI responses)
-    -   Observations and Thoughts
-    -   Each memory is embedded for semantic search (RAG).
+-   **记忆数据 (Memory Data)**: 存储在 `data/chroma_db`。这是一个本地向量数据库，存储：
+    -   对话历史 (用户输入 & AI 回复)
+    -   观察与想法
+    -   每条记忆都经过 Embedding 处理以支持语义搜索 (RAG)。
 
-## 🚀 How to Run
+## 🚀 如何运行
 
 ```bash
 streamlit run src/app.py
 ```
 
-## ✨ Key Features
+## ✨ 核心功能
 
-1.  **RAG Memory**: Retrieves relevant past memories based on the current conversation.
-2.  **Agentic Reflection**:
-    -   Click **"🛑 End Conversation & Reflect"** to trigger a self-reflection process.
-    -   The AI analyzes the chat, updates its mood/relationships, and writes a **Daily Log** entry.
-3.  **Real-time Timing**: Displays the execution time for Retrieval (RAG) and Generation (LLM) in the UI.
-4.  **Advanced RAG (Parent-Child Indexing)**:
-    -   **Threshold-based Summarization**:
-        -   **Short (<300 chars)**: Stored directly to preserve detail and save costs.
-        -   **Long (>300 chars)**: Automatically summarized by LLM. The **Summary** is indexed for search, but the **Original Content** is retrieved for context.
-    -   **Daily Log Integration**: Daily logs are also vectorized (as `daily_log` type) to ensure long-term retrieval of past activities.
+1.  **RAG 记忆检索**: 根据当前对话检索相关的过往记忆。
+2.  **智能反思 (Agentic Reflection)**:
+    -   点击 **"🛑 End Conversation & Reflect"** 触发自我反思流程。
+    -   AI 会分析对话，更新心情/人际关系，并写入 **每日日志**。
+3.  **实时耗时显示**: 在界面上实时显示检索 (RAG) 和生成 (LLM) 的耗时。
+4.  **高级 RAG (父子索引策略)**:
+    -   **基于阈值的总结机制**:
+        -   **短对话 (<300 字符)**: 直接存储，保留细节并节省成本。
+        -   **长对话 (>300 字符)**: 由 LLM 自动总结。**总结**用于索引，**原始内容**用于上下文检索。
+    -   **每日日志集成**: 每日日志也会被向量化 (类型为 `daily_log`)，确保能检索到过往的活动记录。
+## 📝 许可证
 
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+本项目采用MIT许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
 
 
-## 📞 Contact
+## 📞 联系方式
 
 <div align="center">
 
-![KsanaDock Card](docs/时空码头.png)
+![时空码头名片](docs/时空码头.png)
 
 </div>
 
-If you have any questions or suggestions, please contact us via:
+如有问题或建议，请通过以下方式联系：
 
-- Submit an Issue: [GitHub Issues](https://github.com/KsanaDock/CharacterMemory/issues)
-- Official Website: [KsanaDock](https://www.ksanadock.com)
+- 提交Issue: [GitHub Issues](https://github.com/KsanaDock/CharacterMemory/issues)
+- 官方网站: [时空码头KsanaDock](https://www.ksanadock.com)
 
-## 🌐 Follow Us
+## 🌐 关注我们
 
 <div align="center">
 
-### Follow our latest updates on social media
+### 在社交媒体上关注我们的最新动态
 
 <table>
 <tr>
 <td align="center" width="200">
 <a href="https://www.xiaohongshu.com/user/profile/653c5f81000000000301f274">
-<img src="https://img.shields.io/badge/Xiaohongshu-FF2442?style=for-the-badge&logo=xiaohongshu&logoColor=white" alt="Xiaohongshu"/>
+<img src="https://img.shields.io/badge/小红书-FF2442?style=for-the-badge&logo=xiaohongshu&logoColor=white" alt="小红书"/>
 <br/>
-<strong>Xiaohongshu</strong>
+<strong>小红书</strong>
 <br/>
-<sub>Creative Sharing & Exchange</sub>
+<sub>创意分享与交流</sub>
 </a>
 </td>
 <td align="center" width="200">
 <a href="https://space.bilibili.com/336052319">
 <img src="https://img.shields.io/badge/Bilibili-00A1D6?style=for-the-badge&logo=bilibili&logoColor=white" alt="Bilibili"/>
 <br/>
-<strong>Bilibili</strong>
+<strong>哔哩哔哩</strong>
 <br/>
-<sub>Chinese Video Content</sub>
+<sub>中文视频内容</sub>
 </a>
 </td>
 <td align="center" width="200">
@@ -113,7 +112,7 @@ If you have any questions or suggestions, please contact us via:
 <br/>
 <strong>GitHub</strong>
 <br/>
-<sub>Source Code & Updates</sub>
+<sub>项目源码与更新</sub>
 </a>
 </td>
 </tr>
@@ -124,7 +123,7 @@ If you have any questions or suggestions, please contact us via:
 <br/>
 <strong>X (Twitter)</strong>
 <br/>
-<sub>Latest News & Discussions</sub>
+<sub>最新资讯与讨论</sub>
 </a>
 </td>
 <td align="center" width="200">
@@ -133,7 +132,7 @@ If you have any questions or suggestions, please contact us via:
 <br/>
 <strong>YouTube</strong>
 <br/>
-<sub>Demos & Tutorials</sub>
+<sub>演示视频与教程</sub>
 </a>
 </td>
 </tr>
@@ -143,4 +142,4 @@ If you have any questions or suggestions, please contact us via:
 
 ---
 
-**Note**: Using this project requires a valid AI service API key. Please ensure you comply with the terms and conditions of each AI service provider.
+**注意**: 使用本项目需要有效的AI服务API密钥。请确保遵守各AI服务提供商的使用条款和条件。
