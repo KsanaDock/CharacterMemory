@@ -14,11 +14,31 @@ from src.services.llm_service import LLMService
 # Load environment variables
 load_dotenv()
 
+# Simple token estimator (approx 4 chars per token)
+def estimate_tokens(text: str) -> int:
+    return len(text) // 4 if text else 0
+
+def get_dir_size(path):
+    total = 0
+    try:
+        with os.scandir(path) as it:
+            for entry in it:
+                if entry.is_file():
+                    total += entry.stat().st_size
+                elif entry.is_dir():
+                    total += get_dir_size(entry.path)
+    except FileNotFoundError:
+        pass
+    return total
+
 st.set_page_config(page_title="AI Character Memory System", layout="wide")
 
 # --- Session State Initialization ---
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+
+if "rag_latencies" not in st.session_state:
+    st.session_state.rag_latencies = []
 
 # Hot-fix: Check for stale MemoryManager instance (due to code updates)
 if "memory_manager" in st.session_state:
@@ -138,9 +158,23 @@ with col1:
             st.session_state.last_retrieval = memories
             st.session_state.last_rag_time = rag_duration
             
+            # Track latency for P95
+            st.session_state.rag_latencies.append(rag_duration * 1000)
+            
             # 2. Prepare Stream
             context_str = "\n".join([f"- {m['content']}" for m in memories])
             system_prompt = mm._construct_system_prompt(user_name=user_name, user_persona=user_persona)
+            
+            # [Token Count] 1. Input Tokens Breakdown
+            history_str = "\n".join([f"{msg['role']}: {msg['content']}" for msg in st.session_state.chat_history])
+            
+            t_system = estimate_tokens(system_prompt)
+            t_context = estimate_tokens(context_str)
+            t_history = estimate_tokens(history_str)
+            t_prompt = estimate_tokens(prompt)
+            
+            input_tokens = t_system + t_context + t_history + t_prompt
+
             stream = mm.llm_service.generate_response_stream(system_prompt, prompt, context_str)
             
             # 3. Stream Output
@@ -150,6 +184,19 @@ with col1:
             llm_duration = end_llm - start_llm
             st.session_state.last_llm_time = llm_duration
             
+            # [Token Count] 2. Output Tokens
+            output_tokens = estimate_tokens(response)
+            st.session_state.last_token_usage = {
+                "input_total": input_tokens, 
+                "output_total": output_tokens,
+                "breakdown": {
+                    "system": t_system,
+                    "context": t_context,
+                    "history": t_history,
+                    "prompt": t_prompt
+                }
+            }
+            
         # 4. Save to History & Memory
         st.session_state.chat_history.append({"role": "assistant", "content": response})
         mm.save_interaction(prompt, response, user_name=user_name)
@@ -158,7 +205,15 @@ with col1:
     st.divider()
     if st.button("🛑 End Conversation & Reflect"):
         with st.spinner("Reflecting on interaction..."):
+            # [Token Count] 3. Reflection Tokens
+            ref_input_str = str(st.session_state.chat_history)
+            ref_input_tokens = estimate_tokens(ref_input_str)
+
             result = mm.reflect_on_interaction(st.session_state.chat_history, user_name=user_name)
+            
+            ref_output_tokens = estimate_tokens(result)
+            st.caption(f"Reflection Tokens (Est.): Input {ref_input_tokens} | Output {ref_output_tokens}")
+
             st.success("Reflection Complete!")
             st.info(result)
             # Clear history for next session
@@ -169,11 +224,48 @@ with col2:
     st.subheader("🧠 Memory Inspector")
     st.info("This panel shows what the AI is 'thinking' and retrieving.")
     
+    # --- Memory Store Stats ---
+    try:
+        # 1. Count (Assuming ChromaDB collection is accessible)
+        mem_count = mm.vector_store.collection.count()
+        
+        # 2. Storage
+        db_size_mb = get_dir_size("data/chroma_db") / (1024 * 1024)
+        
+        # 3. P95 Latency
+        if st.session_state.rag_latencies:
+            sorted_lats = sorted(st.session_state.rag_latencies)
+            idx = int(0.95 * len(sorted_lats))
+            idx = min(idx, len(sorted_lats) - 1)
+            p95_latency = sorted_lats[idx]
+        else:
+            p95_latency = 0.0
+            
+        ms_col1, ms_col2, ms_col3 = st.columns(3)
+        ms_col1.metric("Entries", f"{mem_count}")
+        ms_col2.metric("RAG P95", f"{p95_latency:.0f} ms")
+        ms_col3.metric("Storage", f"{db_size_mb:.1f} MB")
+        
+        st.divider()
+    except Exception as e:
+        pass
+
     # Display Timings
     if "last_rag_time" in st.session_state and "last_llm_time" in st.session_state:
         t_col1, t_col2 = st.columns(2)
         t_col1.metric("RAG Time", f"{st.session_state.last_rag_time:.3f}s")
         t_col2.metric("LLM Time", f"{st.session_state.last_llm_time:.3f}s")
+        
+        if "last_token_usage" in st.session_state:
+            usage = st.session_state.last_token_usage
+            t_col3, t_col4 = st.columns(2)
+            t_col3.metric("Input Tokens (Est)", usage["input_total"])
+            t_col4.metric("Output Tokens (Est)", usage["output_total"])
+            
+            if "breakdown" in usage:
+                bd = usage["breakdown"]
+                st.caption(f"Breakdown(Tokens): Sys {bd['system']} | Mem {bd['context']} | Hist {bd['history']} | User {bd['prompt']}")
+
         st.divider()
     
     if "last_retrieval" in st.session_state and st.session_state.last_retrieval:
