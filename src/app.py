@@ -152,7 +152,6 @@ with col1:
             
         # 4. Save to History & Memory
         st.session_state.chat_history.append({"role": "assistant", "content": response})
-        mm.save_interaction(prompt, response, user_name=user_name)
 
     # --- Reflection Trigger ---
     st.divider()
@@ -221,7 +220,7 @@ with col2:
                     # Edit Form
                     with st.popover("Edit"):
                         new_content = st.text_area("Content", res['content'], key=f"edit_c_{res['id']}")
-                        new_type = st.selectbox("Type", ["observation", "thought", "action"], index=["observation", "thought", "action"].index(res['metadata']['type']), key=f"edit_t_{res['id']}")
+                        new_type = st.selectbox("Type", ["observation", "thought", "action", "daily_log"], index=["observation", "thought", "action", "daily_log"].index(res['metadata']['type']), key=f"edit_t_{res['id']}")
                         new_imp = st.slider("Importance", 1, 10, res['metadata']['importance'], key=f"edit_i_{res['id']}")
                         
                         if st.button("Save Changes", key=f"save_{res['id']}"):
