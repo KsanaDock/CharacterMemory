@@ -64,7 +64,7 @@ with st.sidebar:
             st.session_state.memory_manager.llm_service.set_api_key(api_key_input)
             st.success("API Key Set!")
 
-    model_name = st.text_input("Model Name", value="x-ai/grok-4.1-fast:free")
+    model_name = st.text_input("Model Name", value="x-ai/grok-4.1-fast")
     if model_name != st.session_state.memory_manager.llm_service.model:
         st.session_state.memory_manager.llm_service.set_model(model_name)
         st.success(f"Model set to {model_name}")
