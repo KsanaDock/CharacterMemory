@@ -67,9 +67,6 @@ class MemoryManager:
         # 3. Generate Response
         response = self.llm_service.generate_response(system_prompt, user_input, context_str)
 
-        # 4. Store interaction
-        self.save_interaction(user_input, response)
-
         return response, relevant_memories
 
     def _construct_system_prompt(self, user_name: str = "User", user_persona: str = "") -> str:
@@ -86,7 +83,7 @@ Respond naturally based on your memory and current state."""
 
     def reflect_on_interaction(self, chat_history: List[Dict], user_name: str = "User") -> str:
         """
-        Analyzes the chat history to update the character's profile (mood, relationships, daily log).
+        Analyzes the chat history to extract detailed memory items and update the character's profile.
         """
         if not chat_history:
             return "No interaction to reflect on."
@@ -94,47 +91,76 @@ Respond naturally based on your memory and current state."""
         # 1. Prepare Context
         history_str = "\n".join([f"{msg['role']}: {msg['content']}" for msg in chat_history])
         current_profile = self.profile.model_dump_json()
-        
-        # 2. Construct Prompt
+
+        # 2. Construct Prompt for Memory Extraction and Profile Update
         prompt = f"""
-        Analyze the following interaction history and the current character profile. 
-        The user's name is '{user_name}'.
-        Determine if any updates are needed for the character's internal state.
-        
-        Current Profile (JSON):
-        {current_profile}
-        
-        Interaction History:
-        {history_str}
-        
-        Instructions:
-        1. Summarize the interaction into a 'Daily Log Entry'.
-        2. Update 'Mood' if changed.
-        3. Update 'Relationships' (create new or update existing affinity/history) if relevant.
-        4. **Check for Learning**: Did the character learn a new skill or improve an existing one?
-        5. **Check for Growth**: Did the character's personality traits or values change?
-        6. **Check for Life Changes**: Did the character's occupation or location change?
-        
-        Return ONLY a valid JSON object with the following structure (do not include markdown formatting):
-        
+Analyze the following interaction history and the current character profile.
+The user's name is '{user_name}'.
+
+Your tasks:
+1. Extract detailed memory items from the conversation
+2. Update the character's internal state if needed
+
+Current Profile (JSON):
+{current_profile}
+
+Interaction History:
+{history_str}
+
+Memory Extraction Guidelines:
+- Extract informative memories, skip greetings, farewells, and content without substance, use third person and directly use names
+- Do NOT start descriptions with phrases like "X told/informed/mentioned/said"
+- Provide direct factual descriptions of complete events
+- Each memory should be self-contained and meaningful
+- Focus on observations, thoughts, and actions that have context value
+- related_entities should be important noun entities in the content (excluding the names of the two conversation participants
+
+Memory Item Types:
+- "observation": Facts, events, or information learned about the world or user
+- "thought": Character's internal reflections, realizations, or cognitive processes
+- "action": What the character did or plans to do
+
+Profile Update Instructions:
+1. Summarize the interaction into a 'Daily Log Entry'
+2. Update 'Mood' if changed
+3. Update 'Relationships' (create new or update existing affinity) if relevant
+4. Check for Learning: Did the character learn a new skill or improve an existing one?
+5. Check for Growth: Did the character's personality traits or values change?
+6. Check for Life Changes: Did the character's occupation or location change?
+
+Return ONLY a valid JSON object with the following structure (do not include markdown formatting):
+
+{{
+    "memory_items": [
         {{
-            "daily_log": {{ "activity": "...", "interacted_with": ["..."] }},
-            "mood": "...",
-            "relationships": {{
-                "Target Name": {{ "affinity": 0, "tags": [], "history": ["..."] }}
-            }},
-            "skills_update": [
-                {{ "name": "Skill Name", "level": 1, "description": "..." }}
-            ],
-            "personality_update": {{
-                "traits": {{ "Trait Name": 5 }},
-                "values": ["Value 1", "Value 2"]
-            }},
-            "context_update": {{
-                "occupation": "...",
-                "current_location": "..."
-            }}
+            "type": "observation|thought|action",
+            "content": "Direct factual description of event/information",
+            "importance": 1-10,
+            "related_entities": ["entity1", "entity2"]
         }}
+    ],
+    "profile_updates": {{
+        "daily_log": {{ "activity": "...", "interacted_with": ["..."] }},
+        "mood": "...",
+        "relationships": {{
+            "Target Character Name": {{ "affinity": 0, "tags": []}}
+        }},
+        "skills_update": [
+            {{ "name": "Skill Name", "level": 1, "description": "..." }}
+        ],
+        "personality_update": {{
+            "traits": {{ "Trait Name": 5 }},
+            "values": ["Value 1", "Value 2"]
+        }},
+        "context_update": {{
+            "occupation": "...",
+            "current_location": "..."
+        }}
+    }}
+}}
+
+# Tip
+Output the 'val' value in the same language as the user's conversation history. For example, if the user uses Chinese, then you output in Chinese.
         """
         
         # 3. Call LLM
@@ -152,16 +178,36 @@ Respond naturally based on your memory and current state."""
             data = json.loads(response.strip())
             
             updates = []
-            
+
+            # Process Memory Items
+            if "memory_items" in data and data["memory_items"]:
+                memory_objects = []
+                for item in data["memory_items"]:
+                    memory_item = MemoryItem(
+                        id=str(uuid.uuid4()),
+                        type=item.get("type", "observation"),
+                        content=item["content"],
+                        importance=item.get("importance", 5),
+                        related_entities=item.get("related_entities", [])
+                    )
+                    memory_objects.append(memory_item)
+
+                if memory_objects:
+                    self.vector_store.add_memories(memory_objects)
+                    updates.append(f"Extracted and stored {len(memory_objects)} detailed memory items.")
+
+            # Process Profile Updates
+            profile_data = data.get("profile_updates", {})
+
             # Update Daily Log
-            if "daily_log" in data:
+            if "daily_log" in profile_data:
                 from src.models.schema import DailyLogEntry
                 log_entry = DailyLogEntry(
-                    activity=data["daily_log"]["activity"],
-                    interacted_with=data["daily_log"].get("interacted_with", [])
+                    activity=profile_data["daily_log"]["activity"],
+                    interacted_with=profile_data["daily_log"].get("interacted_with", [])
                 )
                 self.profile.daily_log.append(log_entry)
-                
+
                 # ALSO save to Vector Store for RAG
                 log_memory = MemoryItem(
                     id=str(uuid.uuid4()),
@@ -175,31 +221,29 @@ Respond naturally based on your memory and current state."""
                 updates.append("Added daily log entry (and saved to long-term memory).")
                 
             # Update Mood
-            if "mood" in data and data["mood"] != self.profile.personality.mood:
+            if "mood" in profile_data and profile_data["mood"] != self.profile.personality.mood:
                 old_mood = self.profile.personality.mood
-                self.profile.personality.mood = data["mood"]
-                updates.append(f"Mood changed from {old_mood} to {data['mood']}.")
-                
+                self.profile.personality.mood = profile_data["mood"]
+                updates.append(f"Mood changed from {old_mood} to {profile_data['mood']}.")
+
             # Update Relationships
-            if "relationships" in data:
+            if "relationships" in profile_data:
                 from src.models.schema import Relationship
-                for name, rel_data in data["relationships"].items():
+                for name, rel_data in profile_data["relationships"].items():
                     if name not in self.profile.relationships:
                         self.profile.relationships[name] = Relationship(target_name=name)
                         updates.append(f"New relationship with {name}.")
-                    
+
                     rel = self.profile.relationships[name]
                     if "affinity" in rel_data:
                         rel.affinity = rel_data["affinity"]
                     if "tags" in rel_data:
                         rel.tags = rel_data["tags"]
-                    if "history" in rel_data:
-                        rel.history.extend(rel_data["history"])
 
             # Update Skills
-            if "skills_update" in data and data["skills_update"]:
+            if "skills_update" in profile_data and profile_data["skills_update"]:
                 from src.models.schema import Skill
-                for skill_data in data["skills_update"]:
+                for skill_data in profile_data["skills_update"]:
                     # Check if skill exists
                     existing_skill = next((s for s in self.profile.skills if s.name == skill_data["name"]), None)
                     if existing_skill:
@@ -216,8 +260,8 @@ Respond naturally based on your memory and current state."""
                         updates.append(f"Learned new skill: {skill_data['name']}.")
 
             # Update Personality
-            if "personality_update" in data:
-                p_update = data["personality_update"]
+            if "personality_update" in profile_data:
+                p_update = profile_data["personality_update"]
                 if "traits" in p_update:
                     self.profile.personality.traits.update(p_update["traits"])
                     updates.append("Updated personality traits.")
@@ -229,8 +273,8 @@ Respond naturally based on your memory and current state."""
                     updates.append("Updated values.")
 
             # Update Context
-            if "context_update" in data:
-                c_update = data["context_update"]
+            if "context_update" in profile_data:
+                c_update = profile_data["context_update"]
                 if "occupation" in c_update and c_update["occupation"]:
                     self.profile.context.occupation = c_update["occupation"]
                     updates.append(f"Occupation changed to {c_update['occupation']}.")
@@ -246,3 +290,14 @@ Respond naturally based on your memory and current state."""
     
     def save_profile(self):
         self.json_store.save_profile(self.profile)
+        
+        
+if __name__ == "__main__":
+    profile_path = "data/profile.json"
+    vector_db_path = "data/chroma_db"
+    
+    # Initialize Services
+    llm_service = LLMService()
+    mm = MemoryManager(profile_path, vector_db_path, llm_service)
+    
+    mm.reflect_on_interaction("11")

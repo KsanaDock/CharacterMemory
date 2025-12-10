@@ -84,7 +84,7 @@ with st.sidebar:
             st.session_state.memory_manager.llm_service.set_api_key(api_key_input)
             st.success("API Key Set!")
 
-    model_name = st.text_input("Model Name", value="x-ai/grok-4.1-fast:free")
+    model_name = st.text_input("Model Name", value="x-ai/grok-4.1-fast")
     if model_name != st.session_state.memory_manager.llm_service.model:
         st.session_state.memory_manager.llm_service.set_model(model_name)
         st.success(f"Model set to {model_name}")
@@ -199,7 +199,6 @@ with col1:
             
         # 4. Save to History & Memory
         st.session_state.chat_history.append({"role": "assistant", "content": response})
-        mm.save_interaction(prompt, response, user_name=user_name)
 
     # --- Reflection Trigger ---
     st.divider()
@@ -313,7 +312,7 @@ with col2:
                     # Edit Form
                     with st.popover("Edit"):
                         new_content = st.text_area("Content", res['content'], key=f"edit_c_{res['id']}")
-                        new_type = st.selectbox("Type", ["observation", "thought", "action"], index=["observation", "thought", "action"].index(res['metadata']['type']), key=f"edit_t_{res['id']}")
+                        new_type = st.selectbox("Type", ["observation", "thought", "action", "daily_log"], index=["observation", "thought", "action", "daily_log"].index(res['metadata']['type']), key=f"edit_t_{res['id']}")
                         new_imp = st.slider("Importance", 1, 10, res['metadata']['importance'], key=f"edit_i_{res['id']}")
                         
                         if st.button("Save Changes", key=f"save_{res['id']}"):
